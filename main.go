@@ -1,8 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
@@ -91,8 +92,9 @@ func (a *AutoWall) getImages() error {
 		defer wg.Done()
 
 		var err error
+		body := []byte("<!DOCTYPE html>")
 		res := new(http.Response)
-		for res.StatusCode != 200 {
+		for res.StatusCode != 200 && !bytes.Contains(body, []byte("DOCTYPE html")) {
 			res, err = http.Get(a.buildSourcePath(source))
 			if err != nil {
 				a.mu.Lock()
@@ -101,6 +103,14 @@ func (a *AutoWall) getImages() error {
 				return
 			}
 			defer res.Body.Close()
+
+			body, err = ioutil.ReadAll(res.Body)
+			if err != nil {
+				a.mu.Lock()
+				result = multierror.Append(result, err)
+				a.mu.Unlock()
+				return
+			}
 
 			source++
 		}
@@ -113,8 +123,7 @@ func (a *AutoWall) getImages() error {
 			return
 		}
 
-		_, err = io.Copy(f, res.Body)
-		if err != nil {
+		if _, err := f.Write(body); err != nil {
 			a.mu.Lock()
 			result = multierror.Append(result, err)
 			a.mu.Unlock()
